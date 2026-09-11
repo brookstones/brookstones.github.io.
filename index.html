@@ -91,12 +91,10 @@
 
 <script>
 // ============================================================
-//  CONFIG
-//  Leave as-is to run in DEMO mode (saves to localStorage).
-//  Add real keys to enable Supabase saving.
+//  CONFIG — your Supabase project
 // ============================================================
-const SUPABASE_URL  = 'YOUR_SUPABASE_PROJECT_URL';
-const SUPABASE_ANON = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL  = 'https://qikgfklwodcpjdmbjcjd.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_pF3U1E11Xk_4QJIr9kAAVw_GZPTSFE7';
 
 const DEMO_MODE = SUPABASE_URL.includes('YOUR_') || SUPABASE_ANON.includes('YOUR_');
 
@@ -105,11 +103,12 @@ if (!DEMO_MODE) {
     try {
         const { createClient } = supabase;
         db = createClient(SUPABASE_URL, SUPABASE_ANON);
+        console.info('%c[Reclaimo] Supabase connected — live mode.', 'color:#00704A;font-weight:bold');
     } catch (e) {
         console.error('[Reclaimo] Supabase init failed:', e);
     }
 } else {
-    console.info('%c[Reclaimo] Running in DEMO mode — data saved to localStorage. Add real Supabase keys to enable cloud saving.', 'color:#00704A;font-weight:bold');
+    console.info('%c[Reclaimo] Running in DEMO mode — data saved to localStorage.', 'color:#00704A;font-weight:bold');
 }
 
 // Helpers
@@ -489,15 +488,15 @@ function mountForm() {
 
         try {
             if (DEMO_MODE) {
-                // Save to localStorage for demo
                 const all = JSON.parse(localStorage.getItem('reclaimo_submissions') || '[]');
                 all.push({ ...data, created_at: new Date().toISOString() });
                 localStorage.setItem('reclaimo_submissions', JSON.stringify(all));
-                await new Promise(r => setTimeout(r, 600)); // fake network delay
+                await new Promise(r => setTimeout(r, 600));
                 console.info('[Reclaimo] Saved to localStorage (DEMO mode):', data);
             } else {
                 const { error } = await db.from('submissions').insert([data]);
                 if (error) throw error;
+                console.info('[Reclaimo] Saved to Supabase:', data);
             }
 
             form.classList.add('hidden');
