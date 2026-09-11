@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reclaimo — Recover what you're owed</title>
+    <meta name="description" content="Reclaimo helps you recover money lost to scams, unpaid invoices, and unfair charges.">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: { extend: {
+                fontFamily: { sans: ['-apple-system','BlinkMacSystemFont','Inter','system-ui','sans-serif'] },
+                colors: { ink:'#1d1d1f', muted:'#6e6e73', surface:'#f5f5f7', accent:'#00704A' }
+            }}
+        }
+    </script>
+    <style>
+        html { -webkit-font-smoothing: antialiased; }
+        input, select, button { font-family: inherit; }
+        .fade-in { animation: fade .3s ease; }
+        @keyframes fade { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform:none; } }
+    </style>
+</head>
+
+<body class="bg-white font-sans text-ink">
+
+<header class="sticky top-0 z-40 border-b border-black/5 bg-white/80 backdrop-blur-xl">
+    <div class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
+        <a href="#/" class="text-[17px] font-semibold tracking-tight">Reclaimo</a>
+        <nav class="flex items-center gap-7 text-[13px]">
+            <a href="#/" class="hidden text-muted transition hover:text-ink sm:inline">Home</a>
+            <a href="#/how" class="hidden text-muted transition hover:text-ink sm:inline">How it works</a>
+            <a href="#/contact" class="hidden text-muted transition hover:text-ink sm:inline">Contact</a>
+            <a href="#/claim" class="rounded-full bg-ink px-4 py-1.5 font-medium text-white transition hover:bg-ink/85">
+                Start a claim
+            </a>
+        </nav>
+    </div>
+</header>
+
+<main id="app" class="min-h-[70vh]"></main>
+
+<footer class="border-t border-black/5 bg-surface">
+    <div class="mx-auto max-w-5xl px-6 py-14">
+        <div class="grid gap-10 sm:grid-cols-2 md:grid-cols-4">
+            <div class="sm:col-span-2 md:col-span-1">
+                <p class="text-[15px] font-semibold tracking-tight">Reclaimo</p>
+                <p class="mt-2 max-w-xs text-[13px] leading-relaxed text-muted">
+                    Helping people recover what they're owed — fairly, quickly, without risk.
+                </p>
+            </div>
+            <div>
+                <p class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-ink">Product</p>
+                <ul class="space-y-2 text-[13px] text-muted">
+                    <li><a href="#/" class="transition hover:text-ink">Home</a></li>
+                    <li><a href="#/how" class="transition hover:text-ink">How it works</a></li>
+                    <li><a href="#/claim" class="transition hover:text-ink">Start a claim</a></li>
+                </ul>
+            </div>
+            <div>
+                <p class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-ink">Legal</p>
+                <ul class="space-y-2 text-[13px] text-muted">
+                    <li><a href="#/privacy" class="transition hover:text-ink">Privacy Policy</a></li>
+                    <li><a href="#/terms" class="transition hover:text-ink">Terms of Service</a></li>
+                    <li><a href="#/cookies" class="transition hover:text-ink">Cookies</a></li>
+                </ul>
+            </div>
+            <div>
+                <p class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-ink">Company</p>
+                <ul class="space-y-2 text-[13px] text-muted">
+                    <li><a href="#/contact" class="transition hover:text-ink">Contact</a></li>
+                    <li><a href="#/about" class="transition hover:text-ink">About</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="mt-12 flex flex-col items-start justify-between gap-3 border-t border-black/5 pt-6 text-[12px] text-muted sm:flex-row sm:items-center">
+            <p>© <span id="year"></span> Reclaimo. All rights reserved.</p>
+            <p>Demonstration project — not a licensed claims company.</p>
+        </div>
+    </div>
+</footer>
+
+<div id="toast" class="fixed bottom-6 left-1/2 z-50 hidden -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-[13px] font-medium text-white shadow-lg"></div>
+
+<script>
+// ============================================================
+//  CONFIG
+//  Leave as-is to run in DEMO mode (saves to localStorage).
+//  Add real keys to enable Supabase saving.
+// ============================================================
+const SUPABASE_URL  = 'YOUR_SUPABASE_PROJECT_URL';
+const SUPABASE_ANON = 'YOUR_SUPABASE_ANON_KEY';
+
+const DEMO_MODE = SUPABASE_URL.includes('YOUR_') || SUPABASE_ANON.includes('YOUR_');
+
+let db = null;
+if (!DEMO_MODE) {
+    try {
+        const { createClient } = supabase;
+        db = createClient(SUPABASE_URL, SUPABASE_ANON);
+    } catch (e) {
+        console.error('[Reclaimo] Supabase init failed:', e);
+    }
+} else {
+    console.info('%c[Reclaimo] Running in DEMO mode — data saved to localStorage. Add real Supabase keys to enable cloud saving.', 'color:#00704A;font-weight:bold');
+}
+
+// Helpers
+const $  = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.remove('hidden');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.add('hidden'), 2600);
+}
+
+// ============================================================
+//  VIEWS
+// ============================================================
+const VIEWS = {
+
+home: `
+<section class="mx-auto max-w-5xl px-6 pb-14 pt-20 text-center sm:pt-28">
+    <span class="inline-flex items-center gap-2 rounded-full bg-surface px-3 py-1 text-[12px] font-medium text-muted">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+        No win, no fee
+    </span>
+    <h1 class="mt-6 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
+        Reclaim the money<br class="hidden sm:block"> you're owed.
+    </h1>
+    <p class="mx-auto mt-6 max-w-xl text-[19px] leading-relaxed text-muted sm:text-[21px]">
+        Scams, unpaid invoices, subscription traps, unfair charges — we handle the fight so you don't have to.
+    </p>
+    <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <a href="#/claim" class="w-full rounded-full bg-ink px-6 py-3 text-[15px] font-medium text-white transition hover:bg-ink/85 sm:w-auto">
+            Start your free case review
+        </a>
+        <a href="#/how" class="w-full rounded-full bg-surface px-6 py-3 text-[15px] font-medium text-ink transition hover:bg-surface/70 sm:w-auto">
+            How it works
+        </a>
+    </div>
+    <p class="mt-5 text-[13px] text-muted">Takes 60 seconds · No obligation · No upfront cost</p>
+</section>
+
+<section class="border-y border-black/5 bg-surface">
+    <div class="mx-auto grid max-w-5xl grid-cols-1 divide-y divide-black/5 px-6 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div class="px-6 py-8 text-center"><p class="text-3xl font-semibold tracking-tight">£48M+</p><p class="mt-1 text-[13px] text-muted">Recovered for clients</p></div>
+        <div class="px-6 py-8 text-center"><p class="text-3xl font-semibold tracking-tight">12,400</p><p class="mt-1 text-[13px] text-muted">Cases resolved</p></div>
+        <div class="px-6 py-8 text-center"><p class="text-3xl font-semibold tracking-tight">94%</p><p class="mt-1 text-[13px] text-muted">Success rate</p></div>
+    </div>
+</section>
+`,
+
+how: `
+<section class="mx-auto max-w-5xl px-6 py-20 fade-in">
+    <p class="text-[12px] font-medium uppercase tracking-wider text-muted text-center">How it works</p>
+    <h1 class="mt-2 text-center text-4xl font-semibold tracking-tight sm:text-5xl">Three steps. Zero risk.</h1>
+    <p class="mx-auto mt-4 max-w-lg text-center text-[16px] leading-relaxed text-muted">
+        We only get paid when you do. If we don't recover your money, you owe us nothing.
+    </p>
+
+    <div class="mt-16 grid gap-12 sm:grid-cols-3">
+        <div>
+            <p class="text-[13px] font-semibold text-accent">01</p>
+            <h3 class="mt-2 text-[17px] font-semibold">Tell us what happened</h3>
+            <p class="mt-2 text-[14px] leading-relaxed text-muted">Fill in a short form describing your case. It takes less than a minute.</p>
+        </div>
+        <div>
+            <p class="text-[13px] font-semibold text-accent">02</p>
+            <h3 class="mt-2 text-[17px] font-semibold">We assess for free</h3>
+            <p class="mt-2 text-[14px] leading-relaxed text-muted">Our specialists review your case and tell you exactly what we can do.</p>
+        </div>
+        <div>
+            <p class="text-[13px] font-semibold text-accent">03</p>
+            <h3 class="mt-2 text-[17px] font-semibold">We recover your money</h3>
+            <p class="mt-2 text-[14px] leading-relaxed text-muted">We pursue the claim on your behalf. You pay nothing unless we win.</p>
+        </div>
+    </div>
+
+    <div class="mt-20 text-center">
+        <a href="#/claim" class="inline-block rounded-full bg-ink px-6 py-3 text-[15px] font-medium text-white transition hover:bg-ink/85">
+            Start a claim
+        </a>
+    </div>
+</section>
+`,
+
+claim: `
+<section class="mx-auto max-w-md px-6 py-20 fade-in">
+    <div class="text-center">
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">Start your claim</h1>
+        <p class="mt-3 text-[15px] leading-relaxed text-muted">Free case review. No win, no fee.</p>
+    </div>
+
+    <div id="successMsg" class="mt-10 hidden rounded-2xl bg-surface px-8 py-14 text-center">
+        <div class="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-full bg-accent">
+            <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </div>
+        <h2 class="text-[22px] font-semibold tracking-tight">Claim received.</h2>
+        <p class="mt-2 text-[15px] text-muted">We'll contact you within 2 business days.</p>
+        <button type="button" id="resetBtn" class="mt-8 text-[14px] font-medium text-accent hover:underline">Submit another claim</button>
+    </div>
+
+    <form id="reclaimoForm" class="mt-10 space-y-3" novalidate>
+        <div class="grid gap-3 sm:grid-cols-2">
+            <input type="text" name="first_name" required placeholder="First name" autocomplete="given-name"
+                   class="w-full rounded-xl bg-surface px-4 py-3.5 text-[15px] text-ink placeholder:text-muted/70 outline-none ring-1 ring-transparent transition focus:bg-white focus:ring-ink/10">
+            <input type="text" name="last_name" required placeholder="Last name" autocomplete="family-name"
+                   class="w-full rounded-xl bg-surface px-4 py-3.5 text-[15px] text-ink placeholder:text-muted/70 outline-none ring-1 ring-transparent transition focus:bg-white focus:ring-ink/10">
+        </div>
+        <input type="email" name="email" required placeholder="Email address" autocomplete="email"
+               class="w-full rounded-xl bg-surface px-4 py-3.5 text-[15px] text-ink placeholder:text-muted/70 outline-none ring-1 ring-transparent transition focus:bg-white focus:ring-ink/10">
+        <input type="tel" name="phone" required placeholder="Phone number" autocomplete="tel"
+               class="w-full rounded-xl bg-surface px-4 py-3.5 text-[15px] text-ink placeholder:text-muted/70 outline-none ring-1 ring-transparent transition focus:bg-white focus:ring-ink/10">
+
+        <div class="relative">
+            <select name="country" required
+                    class="w-full appearance-none rounded-xl bg-surface px-4 py-3.5 pr-10 text-[15px] text-ink outline-none ring-1 ring-transparent transition focus:bg-white focus:ring-ink/10">
+                <option value="" disabled selected>Country</option>
+                <option>United States</option><option>Canada</option><option>United Kingdom</option>
+                <option>Ireland</option><option>Mexico</option><option>Brazil</option>
+                <option>Argentina</option><option>Chile</option><option>Colombia</option>
+                <option>Peru</option><option>Spain</option><option>Portugal</option>
+                <option>France</option><option>Germany</option><option>Italy</option>
+                <option>Netherlands</option><option>Belgium</option><option>Switzerland</option>
+                <option>Austria</option><option>Sweden</option><option>Norway</option>
+                <option>Denmark</option><option>Finland</option><option>Poland</option>
+                <option>Czech Republic</option><option>Greece</option><option>Turkey</option>
+                <option>United Arab Emirates</option><option>Saudi Arabia</option><option>Qatar</option>
+                <option>China</option><option>Japan</option><option>South Korea</option>
+                <option>India</option><option>Indonesia</option><option>Malaysia</option>
+                <option>Philippines</option><option>Singapore</option><option>Thailand</option>
+                <option>Vietnam</option><option>Australia</option><option>New Zealand</option>
+                <option>Egypt</option><option>Morocco</option><option>South Africa</option>
+                <option>Nigeria</option><option>Kenya</option>
+            </select>
+            <svg class="pointer-events-none absolute right-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+
+        <label class="flex cursor-pointer items-start gap-2.5 px-1 pt-2">
+            <input type="checkbox" name="consent" required class="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-accent focus:ring-accent/30">
+            <span class="text-[13px] leading-snug text-muted">
+                I agree to the <a href="#/terms" class="text-ink underline underline-offset-2 hover:text-accent">Terms</a>
+                and <a href="#/privacy" class="text-ink underline underline-offset-2 hover:text-accent">Privacy Policy</a>.
+            </span>
+        </label>
+
+        <div id="errorMsg" class="hidden rounded-xl bg-red-50 px-4 py-3 text-[13px] leading-relaxed text-red-600"></div>
+
+        <button type="submit" id="submitBtn"
+                class="!mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-ink px-6 py-3.5 text-[15px] font-medium text-white transition hover:bg-ink/85 disabled:cursor-not-allowed disabled:opacity-50">
+            <span id="btnText">Submit free case review</span>
+            <svg id="btnSpinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+        </button>
+        <p class="pt-1 text-center text-[12px] text-muted">🔒 Your information is encrypted and never shared.</p>
+    </form>
+</section>
+`,
+
+privacy: `
+<section class="mx-auto max-w-2xl px-6 py-16 sm:py-20 fade-in">
+    <p class="text-[12px] font-medium uppercase tracking-wider text-muted">Legal</p>
+    <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Privacy Policy</h1>
+    <p class="mt-3 text-[15px] text-muted">Last updated: <span class="text-ink">${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</span></p>
+    <div class="mt-12 space-y-10 text-[15px] leading-relaxed text-muted">
+        <div><h2 class="text-[17px] font-semibold text-ink">1. Who we are</h2><p class="mt-3">Reclaimo helps individuals recover money lost to scams, unpaid invoices, and unfair charges. This policy explains what personal data we collect, why, and how we protect it.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">2. What we collect</h2><ul class="mt-3 list-disc space-y-1.5 pl-5"><li>First and last name</li><li>Email address</li><li>Phone number</li><li>Country of residence</li><li>Any details you share about your case</li></ul></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">3. Why we collect it</h2><ul class="mt-3 list-disc space-y-1.5 pl-5"><li>Review and assess your claim</li><li>Contact you about your case</li><li>Comply with legal obligations</li></ul></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">4. Where it is stored</h2><p class="mt-3">Securely with Supabase (encrypted in transit and at rest). Access restricted to authorized staff.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">5. Sharing</h2><p class="mt-3">We never sell your data. We share only when strictly necessary to pursue your claim, and only with your consent.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">6. Your rights</h2><p class="mt-3">Access, correct, or delete your data anytime: <a href="mailto:privacy@reclaimo.com" class="text-accent underline">privacy@reclaimo.com</a>.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">7. Cookies</h2><p class="mt-3">Only essential cookies. See <a href="#/cookies" class="text-accent underline">Cookie Policy</a>.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">8. Contact</h2><p class="mt-3">Email <a href="mailto:privacy@reclaimo.com" class="text-accent underline">privacy@reclaimo.com</a>.</p></div>
+    </div>
+</section>
+`,
+
+terms: `
+<section class="mx-auto max-w-2xl px-6 py-16 sm:py-20 fade-in">
+    <p class="text-[12px] font-medium uppercase tracking-wider text-muted">Legal</p>
+    <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Terms of Service</h1>
+    <p class="mt-3 text-[15px] text-muted">Last updated: <span class="text-ink">${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</span></p>
+    <div class="mt-12 space-y-10 text-[15px] leading-relaxed text-muted">
+        <div><h2 class="text-[17px] font-semibold text-ink">1. Acceptance</h2><p class="mt-3">By using Reclaimo you agree to these Terms. If you don't agree, please don't use the service.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">2. Our service</h2><p class="mt-3">Case-review and money-recovery. We assess for free and pursue recovery on a no-win, no-fee basis.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">3. Your responsibilities</h2><ul class="mt-3 list-disc space-y-1.5 pl-5"><li>Provide accurate, truthful information</li><li>Respond promptly to our communications</li><li>Don't use the service for unlawful purposes</li><li>Don't submit fraudulent or duplicate claims</li></ul></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">4. Fees</h2><p class="mt-3">No upfront cost. A success fee applies only if we recover money — disclosed in writing before engagement.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">5. No guarantee</h2><p class="mt-3">Recovery depends on factors outside our control. We can't guarantee every claim succeeds.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">6. Limitation of liability</h2><p class="mt-3">To the fullest extent permitted by law, Reclaimo isn't liable for indirect or consequential damages.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">7. Changes</h2><p class="mt-3">We may update these Terms. Continued use implies acceptance.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">8. Contact</h2><p class="mt-3">Email <a href="mailto:legal@reclaimo.com" class="text-accent underline">legal@reclaimo.com</a>.</p></div>
+    </div>
+</section>
+`,
+
+cookies: `
+<section class="mx-auto max-w-2xl px-6 py-16 sm:py-20 fade-in">
+    <p class="text-[12px] font-medium uppercase tracking-wider text-muted">Legal</p>
+    <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Cookie Policy</h1>
+    <p class="mt-3 text-[15px] text-muted">Last updated: <span class="text-ink">${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</span></p>
+    <div class="mt-12 space-y-10 text-[15px] leading-relaxed text-muted">
+        <div><h2 class="text-[17px] font-semibold text-ink">1. What we use</h2><p class="mt-3">Only <strong class="text-ink">essential cookies</strong>. No advertising, tracking, or analytics cookies.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">2. Essential cookies</h2><ul class="mt-3 list-disc space-y-1.5 pl-5"><li><strong class="text-ink">session_id</strong> — keeps your form session intact</li><li><strong class="text-ink">csrf_token</strong> — protects against cross-site request forgery</li></ul></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">3. Managing cookies</h2><p class="mt-3">Disable via browser settings — some parts may stop working. No banner shown since we only use strictly-essential cookies.</p></div>
+        <div><h2 class="text-[17px] font-semibold text-ink">4. Contact</h2><p class="mt-3">Email <a href="mailto:privacy@reclaimo.com" class="text-accent underline">privacy@reclaimo.com</a>.</p></div>
+    </div>
+</section>
+`,
+
+contact: `
+<section class="mx-auto max-w-2xl px-6 py-16 sm:py-20 fade-in">
+    <p class="text-[12px] font-medium uppercase tracking-wider text-muted">Company</p>
+    <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Contact us</h1>
+    <p class="mt-3 text-[16px] leading-relaxed text-muted">We typically respond within one business day.</p>
+    <div class="mt-14 grid gap-6 sm:grid-cols-2">
+        <a href="mailto:hello@reclaimo.com" class="group rounded-2xl border border-black/5 bg-surface p-6 transition hover:bg-surface/70">
+            <div class="grid h-10 w-10 place-items-center rounded-full bg-white ring-1 ring-black/5"><svg class="h-4 w-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></div>
+            <p class="mt-4 text-[15px] font-semibold text-ink">Email</p>
+            <p class="mt-1 text-[14px] text-muted">hello@reclaimo.com</p>
+        </a>
+        <a href="tel:+448001234567" class="group rounded-2xl border border-black/5 bg-surface p-6 transition hover:bg-surface/70">
+            <div class="grid h-10 w-10 place-items-center rounded-full bg-white ring-1 ring-black/5"><svg class="h-4 w-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
+            <p class="mt-4 text-[15px] font-semibold text-ink">Phone</p>
+            <p class="mt-1 text-[14px] text-muted">+44 800 123 4567</p>
+        </a>
+        <div class="rounded-2xl border border-black/5 bg-surface p-6">
+            <div class="grid h-10 w-10 place-items-center rounded-full bg-white ring-1 ring-black/5"><svg class="h-4 w-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+            <p class="mt-4 text-[15px] font-semibold text-ink">Office</p>
+            <p class="mt-1 text-[14px] leading-relaxed text-muted">42 Clerkenwell Road<br>London EC1M 5PQ<br>United Kingdom</p>
+        </div>
+        <div class="rounded-2xl border border-black/5 bg-surface p-6">
+            <div class="grid h-10 w-10 place-items-center rounded-full bg-white ring-1 ring-black/5"><svg class="h-4 w-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+            <p class="mt-4 text-[15px] font-semibold text-ink">Hours</p>
+            <p class="mt-1 text-[14px] leading-relaxed text-muted">Mon–Fri · 9:00 – 18:00 GMT<br>Closed on public holidays</p>
+        </div>
+    </div>
+    <div class="mt-14 rounded-2xl border border-black/5 bg-surface p-8 text-center">
+        <h2 class="text-[17px] font-semibold text-ink">Have a claim to make?</h2>
+        <p class="mt-2 text-[14px] text-muted">Skip the queue — start your free case review.</p>
+        <a href="#/claim" class="mt-6 inline-block rounded-full bg-ink px-6 py-3 text-[15px] font-medium text-white transition hover:bg-ink/85">Start a claim</a>
+    </div>
+</section>
+`,
+
+about: `
+<section class="mx-auto max-w-2xl px-6 py-16 sm:py-20 fade-in">
+    <p class="text-[12px] font-medium uppercase tracking-wider text-muted">Company</p>
+    <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">About Reclaimo</h1>
+    <div class="mt-12 space-y-8 text-[16px] leading-relaxed text-muted">
+        <p>Reclaimo exists for one reason: too many people lose money to scams, bad actors, and corporate bureaucracy — and give up because the process is confusing, slow, and expensive.</p>
+        <p>We fix that. We take on the paperwork, the calls, and the pressure. You pay nothing unless we recover your money.</p>
+        <p>Since launching, we've recovered over <strong class="text-ink">£48 million</strong> for more than 12,000 clients across 40+ countries.</p>
+    </div>
+    <div class="mt-14 grid grid-cols-3 gap-6 border-t border-black/5 pt-10 text-center">
+        <div><p class="text-3xl font-semibold tracking-tight text-ink">£48M+</p><p class="mt-1 text-[13px] text-muted">Recovered</p></div>
+        <div><p class="text-3xl font-semibold tracking-tight text-ink">12,400</p><p class="mt-1 text-[13px] text-muted">Cases won</p></div>
+        <div><p class="text-3xl font-semibold tracking-tight text-ink">40+</p><p class="mt-1 text-[13px] text-muted">Countries</p></div>
+    </div>
+    <div class="mt-14 rounded-2xl border border-black/5 bg-surface p-8 text-center">
+        <h2 class="text-[17px] font-semibold text-ink">Ready to start?</h2>
+        <p class="mt-2 text-[14px] text-muted">It takes less than a minute to submit a claim.</p>
+        <a href="#/claim" class="mt-6 inline-block rounded-full bg-ink px-6 py-3 text-[15px] font-medium text-white transition hover:bg-ink/85">Start a claim</a>
+    </div>
+</section>
+`,
+
+notFound: `
+<section class="mx-auto flex max-w-2xl flex-col items-center px-6 py-32 text-center fade-in">
+    <p class="text-[12px] font-medium uppercase tracking-wider text-muted">404</p>
+    <h1 class="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Page not found</h1>
+    <p class="mt-3 text-[16px] text-muted">The page you're looking for doesn't exist or has moved.</p>
+    <a href="#/" class="mt-8 rounded-full bg-ink px-6 py-3 text-[15px] font-medium text-white transition hover:bg-ink/85">Back home</a>
+</section>
+`
+};
+
+// ============================================================
+//  ROUTER
+// ============================================================
+const ROUTES = {
+    '/':        { view: 'home',     title: 'Reclaimo — Recover what you\'re owed' },
+    '/how':     { view: 'how',      title: 'How it works · Reclaimo' },
+    '/claim':   { view: 'claim',    title: 'Start a claim · Reclaimo', mount: mountForm },
+    '/privacy': { view: 'privacy',  title: 'Privacy Policy · Reclaimo' },
+    '/terms':   { view: 'terms',    title: 'Terms of Service · Reclaimo' },
+    '/cookies': { view: 'cookies',  title: 'Cookie Policy · Reclaimo' },
+    '/contact': { view: 'contact',  title: 'Contact · Reclaimo' },
+    '/about':   { view: 'about',    title: 'About · Reclaimo' },
+};
+
+function currentPath() {
+    const h = window.location.hash;
+    if (!h || h === '#' || h === '#/') return '/';
+    return h.slice(1);
+}
+
+function render() {
+    const path  = currentPath();
+    const route = ROUTES[path];
+    const app   = document.getElementById('app');
+
+    if (!route) {
+        app.innerHTML = VIEWS.notFound;
+        document.title = 'Page not found · Reclaimo';
+        window.scrollTo(0, 0);
+        return;
+    }
+
+    app.innerHTML = VIEWS[route.view];
+    document.title = route.title;
+    window.scrollTo(0, 0);
+
+    if (typeof route.mount === 'function') {
+        route.mount();
+    }
+}
+
+window.addEventListener('hashchange', render);
+
+// ============================================================
+//  FORM
+// ============================================================
+function mountForm() {
+    const form = document.getElementById('reclaimoForm');
+    if (!form) return;
+
+    // Reset button
+    const resetBtn = document.getElementById('resetBtn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            form.reset();
+            form.classList.remove('hidden');
+            document.getElementById('successMsg').classList.add('hidden');
+            document.getElementById('errorMsg').classList.add('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const btn     = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const spinner = document.getElementById('btnSpinner');
+        const errBox  = document.getElementById('errorMsg');
+
+        errBox.classList.add('hidden');
+        btn.disabled = true;
+        btnText.textContent = 'Submitting…';
+        spinner.classList.remove('hidden');
+
+        const data = {
+            first_name: form.first_name.value.trim(),
+            last_name:  form.last_name.value.trim(),
+            email:      form.email.value.trim(),
+            phone:      form.phone.value.trim(),
+            country:    form.country.value,
+        };
+
+        const errors = [];
+        if (!data.first_name || !/^[\p{L}\s'\-]{2,50}$/u.test(data.first_name)) errors.push('Enter a valid first name.');
+        if (!data.last_name  || !/^[\p{L}\s'\-]{2,50}$/u.test(data.last_name))  errors.push('Enter a valid last name.');
+        if (!data.email      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.push('Enter a valid email.');
+        if (!data.phone      || !/^[0-9+()\-\s]{7,20}$/.test(data.phone))        errors.push('Enter a valid phone number.');
+        if (!data.country)                                                       errors.push('Select a country.');
+        if (!form.consent.checked)                                               errors.push('Accept the Terms and Privacy Policy.');
+
+        if (errors.length) {
+            errBox.innerHTML = errors.map(m => `• ${m}`).join('<br>');
+            errBox.classList.remove('hidden');
+            btn.disabled = false;
+            btnText.textContent = 'Submit free case review';
+            spinner.classList.add('hidden');
+            return;
+        }
+
+        try {
+            if (DEMO_MODE) {
+                // Save to localStorage for demo
+                const all = JSON.parse(localStorage.getItem('reclaimo_submissions') || '[]');
+                all.push({ ...data, created_at: new Date().toISOString() });
+                localStorage.setItem('reclaimo_submissions', JSON.stringify(all));
+                await new Promise(r => setTimeout(r, 600)); // fake network delay
+                console.info('[Reclaimo] Saved to localStorage (DEMO mode):', data);
+            } else {
+                const { error } = await db.from('submissions').insert([data]);
+                if (error) throw error;
+            }
+
+            form.classList.add('hidden');
+            document.getElementById('successMsg').classList.remove('hidden');
+            if (DEMO_MODE) toast('Saved in demo mode — check console');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (err) {
+            console.error('[Reclaimo] Submission error:', err);
+            errBox.textContent = 'Something went wrong: ' + (err.message || 'Unknown error');
+            errBox.classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btnText.textContent = 'Submit free case review';
+            spinner.classList.add('hidden');
+        }
+    });
+}
+
+// ============================================================
+//  BOOT
+// ============================================================
+document.getElementById('year').textContent = new Date().getFullYear();
+render();
+</script>
+
+</body>
+</html>
